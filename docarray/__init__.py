@@ -1,12 +1,30 @@
-__version__ = '0.13.24'
+__version__ = '0.37.1'
 
-import os
+import logging
 
-from .document import Document
-from .array import DocumentArray
-from .dataclasses import dataclass, field
+from docarray.array import DocList, DocVec
+from docarray.base_doc.doc import BaseDoc
+from docarray.utils._internal.misc import _get_path_from_docarray_root_level
 
-if 'DA_RICH_HANDLER' in os.environ:
-    from rich.traceback import install
+__all__ = ['BaseDoc', 'DocList', 'DocVec']
 
-    install()
+logger = logging.getLogger('docarray')
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(levelname)s - %(name)s - %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
+def __getattr__(name: str):
+    if name in ['Document', 'DocumentArray']:
+        raise ImportError(
+            f'Cannot import name \'{name}\' from \'{_get_path_from_docarray_root_level(__file__)}\'.\n'
+            f'The object named \'{name}\' does not exist anymore in this version of docarray.\n'
+            f'If you still want to use \'{name}\' please downgrade to version <=0.21.0 '
+            f'with: `pip install -U docarray==0.21.0`.'
+        )
+    else:
+        raise ImportError(
+            f'cannot import name \'{name}\' from \'{_get_path_from_docarray_root_level(__file__)}\''
+        )

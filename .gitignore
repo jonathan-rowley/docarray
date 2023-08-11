@@ -49,6 +49,7 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+tests/unit/array/jina*.db*
 
 # Translations
 *.mo
@@ -118,7 +119,6 @@ toy*.py
 .DS_Store
 post/
 toy*.ipynb
-data/
 *.c
 .nes_cache
 toy*.yml
@@ -150,3 +150,5 @@ output/
 # kubernetes testing
 .pytest-kind
 .kube
+
+*.ipynb

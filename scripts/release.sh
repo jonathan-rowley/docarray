@@ -8,7 +8,9 @@
 set -ex
 
 INIT_FILE='docarray/__init__.py'
-VER_TAG='__version__ = '
+PYPROJECT_FILE='pyproject.toml'
+VER_TAG_PYPROJECT="version = "
+VER_TAG="__version__ = "
 RELEASENOTE='./node_modules/.bin/git-release-notes'
 
 function escape_slashes {
@@ -25,6 +27,16 @@ function update_ver_line {
     head -n10 ${FILE}
 }
 
+function update_ver_line_pyproject {
+    local OLD_LINE_PATTERN=$1
+    local NEW_LINE=$2
+    local FILE=$3
+
+    local NEW=$(echo "${NEW_LINE}" | escape_slashes)
+    sed -i '3{/'"${OLD_LINE_PATTERN}"'/s/.*/'"${NEW}"'/}' "${FILE}"
+    head -n10 ${FILE}
+}
+
 
 function clean_build {
     rm -rf dist
@@ -33,10 +45,9 @@ function clean_build {
 }
 
 function pub_pypi {
-    # publish to pypi
     clean_build
-    python setup.py sdist
-    twine upload dist/*
+    poetry config http-basic.pypi $PYPI_USERNAME $PYPI_PASSWORD
+    poetry publish --build
     clean_build
 }
 
@@ -58,10 +69,6 @@ function make_release_note {
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-if [[ "$BRANCH" != "main" ]]; then
-  printf "You are not at main branch, exit\n";
-  exit 1;
-fi
 
 LAST_UPDATE=`git show --no-notes --format=format:"%H" $BRANCH | head -n 1`
 LAST_COMMIT=`git show --no-notes --format=format:"%H" origin/$BRANCH | head -n 1`
@@ -76,6 +83,10 @@ export RELEASE_VER=$(sed -n '/^__version__/p' $INIT_FILE | cut -d \' -f2)
 LAST_VER=$(git tag -l | sort -V | tail -n1)
 printf "last version: \e[1;32m$LAST_VER\e[0m\n"
 
+# Update new _versions.json if necessary
+python ./scripts/prepend_version_json.py --version "v$RELEASE_VER"
+git add ./docs/_versions.json
+
 if [[ $1 == "final" ]]; then
   printf "this will be a final release: \e[1;33m$RELEASE_VER\e[0m\n"
 
@@ -88,6 +99,11 @@ if [[ $1 == "final" ]]; then
 
   VER_TAG_NEXT=$VER_TAG\'${NEXT_VER}\'
   update_ver_line "$VER_TAG" "$VER_TAG_NEXT" "$INIT_FILE"
+
+  VER_TAG_NEXT_PYPROJECT=$VER_TAG_PYPROJECT\'${NEXT_VER}\'
+  update_ver_line_pyproject "$VER_TAG_PYPROJECT" "$VER_TAG_NEXT_PYPROJECT" "$PYPROJECT_FILE"
+
+
   RELEASE_REASON="$2"
   RELEASE_ACTOR="$3"
   git_commit
@@ -104,6 +120,11 @@ elif [[ $1 == 'rc' ]]; then
 
   VER_TAG_NEXT=$VER_TAG\'${NEXT_VER}\'
   update_ver_line "$VER_TAG" "$VER_TAG_NEXT" "$INIT_FILE"
+
+  VER_TAG_NEXT_PYPROJECT=$VER_TAG_PYPROJECT\'${NEXT_VER}\'
+  update_ver_line_pyproject "$VER_TAG_PYPROJECT" "$VER_TAG_NEXT_PYPROJECT" "$PYPROJECT_FILE"
+
+
   RELEASE_REASON="$2"
   RELEASE_ACTOR="$3"
   git_commit
@@ -115,6 +136,9 @@ else
 
   VER_TAG_NEXT=$VER_TAG\'${NEXT_VER}\'
   update_ver_line "$VER_TAG" "$VER_TAG_NEXT" "$INIT_FILE"
+
+  VER_TAG_NEXT_PYPROJECT=$VER_TAG_PYPROJECT\'${NEXT_VER}\'
+  update_ver_line_pyproject "$VER_TAG_PYPROJECT" "$VER_TAG_NEXT_PYPROJECT" "$PYPROJECT_FILE"
 
   pub_pypi
 fi

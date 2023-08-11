@@ -10,53 +10,81 @@ on:
         description: 'CD | TAG | MANUAL'
         required: false
         default: MANUAL
+      build_old_docs:
+        description: 'Whether to build old docs (TRUE | FALSE)'
+        type: string
+        default: 'FALSE'
+      package:
+        description: The name of the repo to build documentation for.
+        type: string
+        default: docarray
+      repo_owner:
+        description: The owner of the repo to build documentation for. Defaults to 'jina-ai'.
+        type: string
+        default: jina-ai
+      pages_branch:
+        description: Branch that Github Pages observes
+        type: string
+        default: gh-pages
+      git_config_name:
+        type: string
+        default: Jina Dev Bot
+      git_config_email:
+        type: string
+        default: dev-bot@jina.ai
 
 jobs:
   token-check:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "success!"
-        if: "${{ github.event.inputs.release_token }} == ${{ env.release_token }}"
+      - name: Check release token
+        id: token-check
+        run: | 
+          touch SUCCESS
+        if: inputs.release_token == env.release_token
         env:
           release_token: ${{ secrets.DOCARRAY_RELEASE_TOKEN }}
+      - name: Fail release token
+        run: |
+          [[ -f SUCCESS ]]
 
-  release-docs:
+  build-and-push-latest-docs:
     needs: token-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v2
+          fetch-depth: 1
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.7
-      - name: Build doc and push to gh-pages
+          python-version: '3.8'
+      - name: Install Dependencies
         run: |
-          git config --local user.email "dev-bot@jina.ai"
-          git config --local user.name "Jina Dev Bot"
-          pip install .
-          mkdir gen-html
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+          python -m poetry config virtualenvs.create false && python -m poetry install --no-interaction --no-ansi --all-extras
+
+      - name: docs Build
+        run: |
           cd docs
-          pip install -r requirements.txt
-          pip install --pre -U furo
-          bash makedoc.sh
-          cd ./_build/dirhtml/
-          cp -r ./ ../../../gen-html
-          cd -  # back to ./docs
+          bash makedocs.sh
           cd ..
-          git checkout -f gh-pages
-          git rm -rf ./docs
-          mkdir -p docs
-          cd gen-html
-          cp -r ./ ../docs
-          cd ../docs
-          ls -la
-          touch .nojekyll
-          cp 404/index.html 404.html
-          sed -i 's/href="\.\./href="/' 404.html # fix asset urls that needs to be updated in 404.html
-          echo docarray.jina.ai > CNAME
-          cd ..
-          git add docs
-          git status
-          git commit -m "chore(docs): update docs due to ${{github.event_name}} on ${{github.repository}}"
-          git push --force origin gh-pages
+      - name: docs Build
+        run: |
+          rm -rf docs
+          mv site /tmp/tmp_docs
+      - name: Checkout to GH pages branch (${{ inputs.pages_branch }})
+        run: |
+          git fetch origin ${{ inputs.pages_branch }}:${{ inputs.pages_branch }} --depth 1
+          git checkout -f ${{ inputs.pages_branch }}
+          git reset --hard HEAD
+          rm -rf docs
+          mv /tmp/tmp_docs docs
+
+      - name: Push it up!
+        run: |
+          git config --local user.email "${{ inputs.git_config_email }}"
+          git config --local user.name "${{ inputs.git_config_name }}"
+          git show --summary
+          git add ./docs && git commit -m "chore(docs): update docs due to ${{github.event_name}} on ${{github.repository}}"
+          git push origin ${{ inputs.pages_branch }}
